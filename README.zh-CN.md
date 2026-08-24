@@ -1,43 +1,87 @@
-# HyperEVM Chain Radar V0.2.0
+# HyperEVM Chain Radar V0.3.0
 
-HyperEVM + HyperCore 双层 HYPE 资金雷达。
+HyperEVM + HyperCore 双层 HYPE 资金雷达，V0.3.0 新增 **Wallet 360 Intelligence**。
 
-## V0.2.0 核心升级
+## V0.3.0 核心升级
 
-这一版不再只看 EVM 链上的 Swap/LP，而是把 HyperCore 和 HyperEVM 同一地址的行为串起来：
+V0.2 已经可以把：
 
-**HyperCore 大额成交 → Core→EVM 资金转入 → HyperSwap BUY → LP ADD → 地址评分 → P0/P1 资金链告警。**
+**HyperCore 大额成交 → Core→EVM → HyperSwap BUY → LP ADD → 地址评分 → P0/P1 资金链告警**
 
-新增：
+串起来。
 
-- HyperCore HYPE Spot `@107` 实时 trades，直接读取 buyer / seller 钱包。
-- Smart Money 地址画像：Core 买卖、Core→EVM、EVM 买卖、LP 加撤、资金链次数、综合分。
-- `Core → EVM → BUY → LP` 同地址、同 Token 关联。
-- HyperSwap V3 历史池 Bootstrap：配置 Etherscan API Key 时读取 Chain ID 999 的完整索引日志。
-- 无 API Key 时使用最近区块 RPC 回退，并严格使用不超过 50 block 的日志窗口，避免滥打官方 RPC。
-- Swap/LP 地址优先使用交易 `tx.from`，降低 Router 被错误当成聪明钱地址的问题。
-- Dashboard 增加聪明钱排行和 `/api/wallets`。
-- Doctor V0.2 增加 Pool Bootstrap / Wallet Schema 检查。
+V0.3.0 再增加高分钱包的 HyperCore 状态：
 
-## 推荐配置
+- `clearinghouseState`：账户价值、Perp 名义仓位、保证金、可提现、未实现盈亏、最大仓位。
+- `spotClearinghouseState`：HYPE / USDC 和其他 Spot 余额。
+- `userVaultEquities`：Vault 资金。
+- HyperEVM Read Precompile 同块状态校验。
+- 高分钱包 `userFills` / `userNonFundingLedgerUpdates` 动态 WebSocket 订阅。
+- 观察名单更新直接在现有 WebSocket 上 subscribe/unsubscribe，不再定时断线重连。
+- 意外断线后仅恢复最近几秒 Snapshot，并依靠事件去重；Fill 去重键包含 HyperCore `tid`，避免同订单多次撮合相互覆盖。
+- 大额 Perp 名义仓位变化 P1 提醒。
+- Dashboard 新增 Wallet 360 表格和 `/api/wallet360`。
+
+## Read Precompile
+
+V0.3.0 使用 HyperEVM 原生 Read Precompile，调用方式是 `eth_call` + 原始 ABI 参数，不带 Solidity 函数 selector：
+
+- `0x...0801` Spot Balance
+- `0x...0809` HyperCore L1 Block Number
+- `0x...080f` Account Margin Summary
+- `0x...0810` Core User Exists
+
+`AccountMarginSummary` 按当前官方 `hyper-evm-lib` 的 ABI 顺序解码：`accountValue → marginUsed → ntlPos → rawUsd`。
+
+默认只对排名最高的 3 个观察钱包每 5 分钟校验一次，避免与 1 秒级 HyperEVM Scanner 争抢 RPC 请求额度。
+
+## 默认观察策略
 
 ```env
-HYPERCORE_TRADE_COINS=@107
-HYPERCORE_SMART_MONEY_MIN_USD=100000
-HYPERCORE_WHALE_TRADE_USD=500000
-ETHERSCAN_API_KEY=
-CAPITAL_SEQUENCE_WINDOW_MIN=180
-CAPITAL_SEQUENCE_P1_USD=100000
-CAPITAL_SEQUENCE_P0_TRANSFER_USD=500000
-CAPITAL_SEQUENCE_P0_BUY_USD=250000
-CAPITAL_SEQUENCE_P0_LP_USD=250000
+WALLET360_MIN_SCORE=60
+WALLET360_MAX_WALLETS=12
+WALLET360_REFRESH_SEC=60
+WALLET360_VAULT_REFRESH_SEC=300
+WALLET360_STATE_ALERT_USD=1000000
+
+SMART_WALLET_STREAM_MIN_SCORE=70
+SMART_WALLET_STREAM_MAX_WALLETS=8
+SMART_WALLET_STREAM_REBUILD_SEC=300
+SMART_WALLET_FILL_ALERT_USD=250000
+SMART_WALLET_SNAPSHOT_RECOVERY_SEC=5
+
+READ_PRECOMPILE_MAX_WALLETS=3
+READ_PRECOMPILE_REFRESH_SEC=300
 ```
 
-`ETHERSCAN_API_KEY` 不是运行必需项，但建议配置。没有 Key 时，系统不会从 Factory 部署块一路用官方 RPC 扫到最新高度，而只扫描最近的可配置窗口，这是为了控制 HyperEVM 官方 RPC 请求量。
+这意味着普通低分地址不会不断调用 HyperCore 用户状态接口。只有已经通过 Core/EVM/Swap/LP 行为进入高分区的钱包才会进入 Wallet 360。
 
-## 风险边界
+## Dashboard
 
-- P0/P1 和 Smart Money Score 是工程观察优先级，不是买入建议。
-- LP 撤出比例是 Radar 已观察并能定价的 LP 资金流基线，不是精确 TVL。
-- HyperCore→HyperEVM 原生 HYPE 系统交易仍标注 best-effort。
-- 项目只读，不需要私钥、助记词或交易签名。
+- `/zh` 中文
+- `/en` English
+- `/api/health`
+- `/api/events`
+- `/api/wallets`
+- `/api/wallet360`
+- `/api/wallet360/0x...`
+
+Wallet 360 会展示：
+
+- Wallet Score
+- HyperCore Account Value
+- Perp Notional
+- Unrealized PnL
+- 最大 Perp 仓位
+- HYPE / USDC Spot
+- Vault Equity
+- Read Precompile 是否成功
+
+## 数据语义和风险边界
+
+- Wallet Score / P0 / P1 都是工程观察优先级，不是买入建议。
+- REST 快照和 Read Precompile 可能来自不同时间点，因此记录为双源校验，不强制数值完全相等。
+- Smart Wallet 观察名单更新不会主动断开 WebSocket；意外断线恢复时只接收一个很小的 Snapshot 时间重叠窗口，已入库事件通过去重不会再次告警。
+- LP 撤出比例仍是 Radar 已观察、且可美元估值的资金流基线，不是精确 TVL。
+- HyperCore→HyperEVM 原生 HYPE 系统交易仍标记 best-effort。
+- 项目完全只读，不需要私钥、助记词或交易签名。
