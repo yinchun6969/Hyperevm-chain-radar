@@ -1,47 +1,43 @@
-# HyperEVM Chain Radar V0.1.0
+# HyperEVM Chain Radar V0.2.0
 
-面向 **HyperEVM + HyperCore** 的独立开源资金监控项目。
+HyperEVM + HyperCore 双层 HYPE 资金雷达。
 
-## 第一版重点
+## V0.2.0 核心升级
 
-- Chain ID `999` HyperEVM 实时扫描
-- small / big 双区块识别
-- HyperCore `allMids` WebSocket HYPE 价格
-- HYPE / HIP-1 资产 Core ↔ EVM 系统转账识别
-- CoreWriter Action ID 监控
-- HyperSwap V3 新池、Swap、Add LP、Remove LP
-- USDC / WHYPE 保守美元估值
-- LP 大额撤出 P0/P1
-- Telegram、SQLite、本地 Dashboard、Doctor
-- Android Termux / Ubuntu systemd
+这一版不再只看 EVM 链上的 Swap/LP，而是把 HyperCore 和 HyperEVM 同一地址的行为串起来：
 
-`LP_RUG_P0_DRAIN_PCT` 使用 Radar 已观察且能完成美元估值的 LP 流量基线，不等于精确 TVL 跌幅。
+**HyperCore 大额成交 → Core→EVM 资金转入 → HyperSwap BUY → LP ADD → 地址评分 → P0/P1 资金链告警。**
 
-V0.1.0 从 `PoolCreated` 发现 HyperSwap V3 新池后开始跟踪；历史已有池 bootstrap 放到下一阶段。
+新增：
 
-### Android
-```bash
-pkg update
-pkg install -y git
-git clone https://github.com/yinchun6969/Hyperevm-chain-radar.git
-cd Hyperevm-chain-radar
-bash scripts/android/install-termux.sh
+- HyperCore HYPE Spot `@107` 实时 trades，直接读取 buyer / seller 钱包。
+- Smart Money 地址画像：Core 买卖、Core→EVM、EVM 买卖、LP 加撤、资金链次数、综合分。
+- `Core → EVM → BUY → LP` 同地址、同 Token 关联。
+- HyperSwap V3 历史池 Bootstrap：配置 Etherscan API Key 时读取 Chain ID 999 的完整索引日志。
+- 无 API Key 时使用最近区块 RPC 回退，并严格使用不超过 50 block 的日志窗口，避免滥打官方 RPC。
+- Swap/LP 地址优先使用交易 `tx.from`，降低 Router 被错误当成聪明钱地址的问题。
+- Dashboard 增加聪明钱排行和 `/api/wallets`。
+- Doctor V0.2 增加 Pool Bootstrap / Wallet Schema 检查。
+
+## 推荐配置
+
+```env
+HYPERCORE_TRADE_COINS=@107
+HYPERCORE_SMART_MONEY_MIN_USD=100000
+HYPERCORE_WHALE_TRADE_USD=500000
+ETHERSCAN_API_KEY=
+CAPITAL_SEQUENCE_WINDOW_MIN=180
+CAPITAL_SEQUENCE_P1_USD=100000
+CAPITAL_SEQUENCE_P0_TRANSFER_USD=500000
+CAPITAL_SEQUENCE_P0_BUY_USD=250000
+CAPITAL_SEQUENCE_P0_LP_USD=250000
 ```
 
-安装后：
-```bash
-cd ~/hyperevm-chain-radar
-bash start-termux.sh
-.venv/bin/python doctor.py
-```
+`ETHERSCAN_API_KEY` 不是运行必需项，但建议配置。没有 Key 时，系统不会从 Factory 部署块一路用官方 RPC 扫到最新高度，而只扫描最近的可配置窗口，这是为了控制 HyperEVM 官方 RPC 请求量。
 
-Dashboard：`http://127.0.0.1:8788/zh`
+## 风险边界
 
-### Ubuntu
-```bash
-git clone https://github.com/yinchun6969/Hyperevm-chain-radar.git
-cd Hyperevm-chain-radar
-sudo bash scripts/ubuntu/install.sh
-```
-
-本项目只读监控，不需要私钥、助记词或交易签名。
+- P0/P1 和 Smart Money Score 是工程观察优先级，不是买入建议。
+- LP 撤出比例是 Radar 已观察并能定价的 LP 资金流基线，不是精确 TVL。
+- HyperCore→HyperEVM 原生 HYPE 系统交易仍标注 best-effort。
+- 项目只读，不需要私钥、助记词或交易签名。
