@@ -10,6 +10,18 @@ def _f(v):
     except (TypeError,ValueError):return 0.0
 
 
+def _ledger_usd(delta):
+    """Return an explicitly USD/USDC-denominated amount when the ledger type has one.
+
+    HyperCore ledger deltas do not use one universal amount field. Do not treat
+    generic token `amount` as USD because it can be HYPE or another spot token.
+    """
+    for key in ('netWithdrawnUsd','usdcValue','liquidatedNtlPos','requestedUsd','usdc'):
+        value=abs(_f((delta or {}).get(key)))
+        if value:return value
+    return 0.0
+
+
 class HyperCoreUserStream:
     """Dynamic WebSocket subscriptions for the highest-scoring wallets.
 
@@ -33,7 +45,7 @@ class HyperCoreUserStream:
             if self.tg and usd>=self.fill_alert:
                 msg=(f"⚡ 高分钱包 HyperCore 成交\nScore：{score}\n钱包：{user}\n方向：{direction}\n资产：{coin}\n金额：${usd:,.0f}" if self.zh else f"⚡ Smart Wallet HyperCore Fill\nScore: {score}\nWallet: {user}\nSide: {direction}\nAsset: {coin}\nAmount: ${usd:,.0f}");self.tg.send(msg)
     def _save_ledger(self,user,row):
-        delta=(row or {}).get('delta') or {};kind=str(delta.get('type') or 'ledger');stamp=int(_f((row or {}).get('time'))/1000) if _f((row or {}).get('time'))>10_000_000_000 else int(_f((row or {}).get('time')) or time.time());usd=abs(_f(delta.get('usdc')));tx=f"{(row or {}).get('hash') or 'ledger'}:{kind}:{(row or {}).get('time')}"
+        delta=(row or {}).get('delta') or {};kind=str(delta.get('type') or 'ledger');stamp=int(_f((row or {}).get('time'))/1000) if _f((row or {}).get('time'))>10_000_000_000 else int(_f((row or {}).get('time')) or time.time());usd=_ledger_usd(delta);tx=f"{(row or {}).get('hash') or 'ledger'}:{kind}:{(row or {}).get('time')}"
         e={'ts':stamp,'tx_hash':tx,'source':'hypercore-user','kind':'HYPERCORE_LEDGER','protocol':'HyperCore','actor':user,'direction':kind.upper(),'usd':usd or None,'details':delta}
         if self.store.add_event(**e):self.store.wallet_flow(user,stamp)
     def _message(self,ws,msg):
@@ -46,7 +58,7 @@ class HyperCoreUserStream:
             if ch=='userFills':
                 for f in data.get('fills') or []:self._save_fill(user,f)
             elif ch=='userNonFundingLedgerUpdates':
-                rows=data.get('nonFundingLedgerUpdates') or data.get('ledgerUpdates') or data.get('updates') or []
+                rows=data.get('nonFundingLedgerUpdates') or []
                 for row in rows:self._save_ledger(user,row)
         except Exception:log.exception('smart-wallet WS parse')
     def _close_later(self,ws):
@@ -54,16 +66,19 @@ class HyperCoreUserStream:
             try:ws.close()
             except Exception:pass
     def _open(self,ws):
-        wallets=self._watch();self.store.kv_set('smart_wallet_stream_count',len(wallets))
+        wallets=self._watch();now=int(time.time());self.store.kv_set('smart_wallet_stream_count',len(wallets));self.store.kv_set('smart_wallet_ws_heartbeat',now);self.store.kv_set('smart_wallet_ws_connected',1)
         for user in wallets:
             ws.send(json.dumps({'method':'subscribe','subscription':{'type':'userFills','user':user}}))
             ws.send(json.dumps({'method':'subscribe','subscription':{'type':'userNonFundingLedgerUpdates','user':user}}))
         threading.Thread(target=self._close_later,args=(ws,),daemon=True).start()
+    def _close(self,ws,code,msg):
+        self.store.kv_set('smart_wallet_ws_connected',0)
     def run(self,stop):
         self.stop=stop
         while not stop.is_set():
-            if not self._watch():stop.wait(30);continue
+            if not self._watch():self.store.kv_set('smart_wallet_ws_connected',0);stop.wait(30);continue
             try:
-                ws=websocket.WebSocketApp(self.url,on_message=self._message,on_open=self._open);ws.run_forever(ping_interval=25,ping_timeout=10)
+                ws=websocket.WebSocketApp(self.url,on_message=self._message,on_open=self._open,on_close=self._close);ws.run_forever(ping_interval=25,ping_timeout=10)
             except Exception:log.exception('smart-wallet websocket')
+            finally:self.store.kv_set('smart_wallet_ws_connected',0)
             stop.wait(3)
