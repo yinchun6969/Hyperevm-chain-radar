@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS lp_state(pool TEXT PRIMARY KEY,observed_add_usd REAL 
 CREATE TABLE IF NOT EXISTS alerts(alert_key TEXT PRIMARY KEY,ts INTEGER NOT NULL,level TEXT NOT NULL,kind TEXT NOT NULL,details TEXT);
 CREATE TABLE IF NOT EXISTS wallet_profiles(address TEXT PRIMARY KEY,first_seen INTEGER NOT NULL,last_seen INTEGER NOT NULL,core_buy_usd REAL NOT NULL DEFAULT 0,core_sell_usd REAL NOT NULL DEFAULT 0,evm_buy_usd REAL NOT NULL DEFAULT 0,evm_sell_usd REAL NOT NULL DEFAULT 0,core_to_evm_usd REAL NOT NULL DEFAULT 0,evm_to_core_usd REAL NOT NULL DEFAULT 0,lp_add_usd REAL NOT NULL DEFAULT 0,lp_remove_usd REAL NOT NULL DEFAULT 0,core_trade_count INTEGER NOT NULL DEFAULT 0,evm_trade_count INTEGER NOT NULL DEFAULT 0,sequence_count INTEGER NOT NULL DEFAULT 0,score INTEGER NOT NULL DEFAULT 0,tags TEXT NOT NULL DEFAULT '[]');
 CREATE INDEX IF NOT EXISTS idx_wallet_score ON wallet_profiles(score DESC,last_seen DESC);
+CREATE TABLE IF NOT EXISTS wallet360(address TEXT PRIMARY KEY,updated_at INTEGER NOT NULL,score INTEGER NOT NULL DEFAULT 0,account_value REAL NOT NULL DEFAULT 0,perp_ntl REAL NOT NULL DEFAULT 0,margin_used REAL NOT NULL DEFAULT 0,withdrawable REAL NOT NULL DEFAULT 0,unrealized_pnl REAL NOT NULL DEFAULT 0,perp_positions INTEGER NOT NULL DEFAULT 0,largest_perp_coin TEXT,largest_perp_usd REAL NOT NULL DEFAULT 0,hype_spot REAL NOT NULL DEFAULT 0,usdc_spot REAL NOT NULL DEFAULT 0,vault_equity REAL NOT NULL DEFAULT 0,precompile_ok INTEGER NOT NULL DEFAULT 0,precompile_l1_block INTEGER,snapshot TEXT NOT NULL DEFAULT '{}');
+CREATE INDEX IF NOT EXISTS idx_wallet360_score ON wallet360(score DESC,updated_at DESC);
 """
 WALLET_FIELDS={'core_buy_usd','core_sell_usd','evm_buy_usd','evm_sell_usd','core_to_evm_usd','evm_to_core_usd','lp_add_usd','lp_remove_usd','core_trade_count','evm_trade_count','sequence_count'}
 class Store:
@@ -63,3 +65,17 @@ class Store:
     def top_wallets(self,limit=25):
         cols=['address','first_seen','last_seen','core_buy_usd','core_sell_usd','evm_buy_usd','evm_sell_usd','core_to_evm_usd','evm_to_core_usd','lp_add_usd','lp_remove_usd','core_trade_count','evm_trade_count','sequence_count','score','tags']
         with self.lock:return [dict(zip(cols,r)) for r in self.db.execute('SELECT * FROM wallet_profiles ORDER BY score DESC,last_seen DESC LIMIT ?',(int(limit),))]
+    def wallet_candidates(self,min_score=60,limit=12):
+        cols=['address','first_seen','last_seen','core_buy_usd','core_sell_usd','evm_buy_usd','evm_sell_usd','core_to_evm_usd','evm_to_core_usd','lp_add_usd','lp_remove_usd','core_trade_count','evm_trade_count','sequence_count','score','tags']
+        with self.lock:return [dict(zip(cols,r)) for r in self.db.execute('SELECT * FROM wallet_profiles WHERE score>=? ORDER BY score DESC,last_seen DESC LIMIT ?',(int(min_score),int(limit)))]
+    def save_wallet360(self,address,score,snapshot):
+        s=snapshot or {};p=s.get('perp') or {};sp=s.get('spot') or {};pc=s.get('precompile') or {};largest=p.get('largest') or {}
+        row=((address or '').lower(),int(time.time()),int(score or 0),float(p.get('account_value') or 0),float(p.get('ntl_pos') or 0),float(p.get('margin_used') or 0),float(p.get('withdrawable') or 0),float(p.get('unrealized_pnl') or 0),int(p.get('positions') or 0),largest.get('coin'),float(largest.get('usd') or 0),float(sp.get('hype') or 0),float(sp.get('usdc') or 0),float(s.get('vault_equity') or 0),1 if pc.get('ok') else 0,pc.get('l1_block_number'),json.dumps(s,ensure_ascii=False,separators=(',',':')))
+        with self.lock:
+            self.db.execute('INSERT OR REPLACE INTO wallet360(address,updated_at,score,account_value,perp_ntl,margin_used,withdrawable,unrealized_pnl,perp_positions,largest_perp_coin,largest_perp_usd,hype_spot,usdc_spot,vault_equity,precompile_ok,precompile_l1_block,snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',row);self.db.commit()
+    def wallet360_rows(self,limit=25):
+        cols=['address','updated_at','score','account_value','perp_ntl','margin_used','withdrawable','unrealized_pnl','perp_positions','largest_perp_coin','largest_perp_usd','hype_spot','usdc_spot','vault_equity','precompile_ok','precompile_l1_block','snapshot']
+        with self.lock:return [dict(zip(cols,r)) for r in self.db.execute('SELECT * FROM wallet360 ORDER BY score DESC,updated_at DESC LIMIT ?',(int(limit),))]
+    def wallet360_get(self,address):
+        rows=self.wallet360_rows(1000)
+        return next((x for x in rows if x['address']==(address or '').lower()),None)
