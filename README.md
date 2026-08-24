@@ -1,50 +1,35 @@
-# HyperEVM Chain Radar V0.1.0
+# HyperEVM Chain Radar V0.2.0
 
-**中文 | English** — HyperEVM + HyperCore real-time capital-flow monitoring.
+**中文 | English** — HyperEVM + HyperCore capital-flow and smart-money monitoring.
 
 [中文说明](README.zh-CN.md) · [English README](README.en-US.md)
 
-> Independent community project. Not affiliated with or endorsed by Hyperliquid or HyperSwap.
+> Independent community project. Not affiliated with or endorsed by Hyperliquid, HyperSwap, or Etherscan.
 
-## V0.1.0 scope
+## V0.2.0 — HYPE Smart-Money Radar
 
-- HyperEVM mainnet Chain ID `999`
-- dual-block-aware EVM scanner
-- HyperCore `allMids` WebSocket price stream
-- HyperCore ↔ HyperEVM system-transfer detection
-- CoreWriter call/action-ID monitoring
-- HyperSwap V3 new-pool, swap, LP add/remove monitoring
-- conservative USD estimation using native USDC / WHYPE anchors
-- P0/P1 LP large-withdrawal radar
-- SQLite persistence + dedupe
-- Telegram alerts
-- `/zh`, `/en`, `/api/health`, `/api/events`
-- one-command `doctor.py`
-- Android Termux + Ubuntu systemd deployment
+V0.2.0 upgrades the V0.1 EVM scanner into a two-layer capital radar:
 
-## Architecture
+**HyperCore trade → Core→EVM transfer → HyperSwap BUY → LP deployment → wallet score → P0/P1 sequence alert.**
 
-```mermaid
-flowchart LR
-  HC[HyperCore WebSocket] --> PRICE[HYPE Price Cache]
-  EVM[HyperEVM RPC] --> SCAN[Dual-block Scanner]
-  SCAN --> XFER[Core/EVM Transfers]
-  SCAN --> CW[CoreWriter]
-  SCAN --> HSV3[HyperSwap V3]
-  PRICE --> INTEL[Capital Intelligence]
-  XFER --> INTEL
-  CW --> INTEL
-  HSV3 --> INTEL
-  INTEL --> DB[(SQLite)]
-  INTEL --> TG[Telegram]
-  DB --> WEB[Dashboard]
-```
+### New in V0.2.0
+
+- HyperCore HYPE spot trade stream (`@107`) with buyer/seller wallet attribution.
+- Smart-money wallet profiles: Core buys/sells, Core→EVM flows, EVM buys/sells, LP adds/removes, sequence count and score.
+- `Core → EVM → BUY → LP` correlation with token matching and P0/P1 Telegram alerts.
+- HyperSwap V3 historical pool bootstrap.
+  - Full indexed history when `ETHERSCAN_API_KEY` is configured.
+  - Recent RPC fallback without a key, using <=50-block `eth_getLogs` windows.
+- Swap/LP actor attribution uses transaction sender where available, rather than router-only event sender.
+- Dashboard smart-money table and `/api/wallets`.
+- Doctor V0.2 checks pool bootstrap mode and wallet schema.
+
+V0.1 capabilities remain: Chain ID 999 dual-block scan, HyperCore allMids price feed, CoreWriter monitoring, HyperSwap V3 pool/swap/LP monitoring, LP withdrawal radar, RPC failover, SQLite, Telegram, Android Termux and Ubuntu systemd.
 
 ## Quick start
 
-Android / Termux:
-
 ```bash
+# Android / Termux
 pkg update
 pkg install -y git
 git clone https://github.com/yinchun6969/Hyperevm-chain-radar.git
@@ -52,35 +37,47 @@ cd Hyperevm-chain-radar
 bash scripts/android/install-termux.sh
 ```
 
-Ubuntu:
-
 ```bash
-git clone https://github.com/yinchun6969/Hyperevm-chain-radar.git
-cd Hyperevm-chain-radar
+# Ubuntu
 sudo bash scripts/ubuntu/install.sh
 ```
 
-Dashboard: `http://127.0.0.1:8788/zh` · `http://127.0.0.1:8788/en`
+Dashboard: `http://127.0.0.1:8788/zh` · `/en`  
+APIs: `/api/health` · `/api/events` · `/api/wallets`
 
-## Monitoring semantics
+## Recommended V0.2 config
 
-- HyperEVM official JSON-RPC currently has no WebSocket JSON-RPC; EVM scanning uses HTTP polling.
-- V0.1.0 uses one-block `eth_getLogs` windows, below HyperEVM's documented 50-block query maximum.
-- HyperCore → HyperEVM HYPE system-transaction detection is marked best-effort.
-- ERC20 Core ↔ EVM system-address transfers and HYPE EVM → Core `Received` logs are deterministic EVM observations.
-- LP drain percentages use Radar-observed priced LP flow, not exact pool TVL.
-- V0.1.0 discovers HyperSwap V3 pools from `PoolCreated`; historical pool bootstrapping is planned next.
-- This is monitoring software, not an investment recommendation or smart-contract audit.
+```env
+HYPERCORE_TRADE_COINS=@107
+HYPERCORE_SMART_MONEY_MIN_USD=100000
+HYPERCORE_WHALE_TRADE_USD=500000
+ETHERSCAN_API_KEY=
+CAPITAL_SEQUENCE_WINDOW_MIN=180
+CAPITAL_SEQUENCE_P1_USD=100000
+CAPITAL_SEQUENCE_P0_TRANSFER_USD=500000
+CAPITAL_SEQUENCE_P0_BUY_USD=250000
+CAPITAL_SEQUENCE_P0_LP_USD=250000
+```
 
-## Verified constants
+## Important semantics
 
-- Chain ID `999`
-- RPC `https://rpc.hyperliquid.xyz/evm`
-- HYPE system `0x2222222222222222222222222222222222222222`
-- CoreWriter `0x3333333333333333333333333333333333333333`
-- WHYPE `0x5555555555555555555555555555555555555555`
-- Native USDC `0xb88339CB7199b77E23DB6E890353E22632Ba630f`
-- HyperSwap V3 Factory `0xB1c0fa0B789320044A6F623cFe5eBda9562602E3`
+- HyperCore `trades` exposes buyer/seller users; V0.2 uses this for wallet-level Core activity.
+- HYPE spot on HyperCore mainnet is tracked as `@107` by default.
+- Full HyperSwap pool history uses Etherscan API V2 with `chainid=999`; official HyperEVM JSON-RPC remains the realtime source.
+- Without an Etherscan key, bootstrap intentionally scans only a recent configurable RPC window to avoid hundreds of thousands of requests.
+- HyperCore→HyperEVM native HYPE system-transaction detection remains best-effort.
+- LP withdrawal percentages are Radar-observed priced-flow baselines, not exact TVL.
+- Wallet scores are engineering observation scores, not investment recommendations.
+
+## Verified network constants
+
+- HyperEVM Chain ID: `999`
+- RPC: `https://rpc.hyperliquid.xyz/evm`
+- HYPE system: `0x2222222222222222222222222222222222222222`
+- CoreWriter: `0x3333333333333333333333333333333333333333`
+- WHYPE: `0x5555555555555555555555555555555555555555`
+- HyperSwap V3 Factory: `0xB1c0fa0B789320044A6F623cFe5eBda9562602E3`
+- HyperSwap V3 Factory deployment block used for indexed bootstrap: `11648`
 
 ## License
 MIT
