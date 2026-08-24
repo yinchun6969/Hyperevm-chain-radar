@@ -4,6 +4,7 @@ from pathlib import Path
 from core.env import load_dotenv
 load_dotenv()
 from core.rpc import RPCPool
+from core.version import VERSION_LABEL
 from chains.hyperevm import DEFAULT_RPC,CHAIN_ID
 from services.hypercore_info import HyperCoreInfoClient
 from services.read_precompile import ReadPrecompile
@@ -21,13 +22,13 @@ def main():
     except Exception as e:add('WARN','HyperCore Info API',e)
     db=Path(os.getenv('DB_PATH',Path(__file__).with_name('radar.db')))
     try:
-        d=sqlite3.connect(db);x=d.execute('PRAGMA integrity_check').fetchone()[0];tables={r[0] for r in d.execute("SELECT name FROM sqlite_master WHERE type='table'")};pools=d.execute("SELECT COUNT(*) FROM pools WHERE protocol='HyperSwap V3'").fetchone()[0] if 'pools' in tables else 0;wallets=d.execute('SELECT COUNT(*) FROM wallet_profiles').fetchone()[0] if 'wallet_profiles' in tables else 0;w360=d.execute('SELECT COUNT(*) FROM wallet360').fetchone()[0] if 'wallet360' in tables else 0;add('OK' if x=='ok' else 'FAIL','SQLite',f'{x}; pools={pools}; wallets={wallets}; wallet360={w360}');add('OK' if 'wallet360' in tables else 'WARN','Wallet 360 schema','ready' if 'wallet360' in tables else 'start V0.3.0 once to migrate');d.close()
+        d=sqlite3.connect(db);x=d.execute('PRAGMA integrity_check').fetchone()[0];tables={r[0] for r in d.execute("SELECT name FROM sqlite_master WHERE type='table'")};pools=d.execute("SELECT COUNT(*) FROM pools WHERE protocol='HyperSwap V3'").fetchone()[0] if 'pools' in tables else 0;wallets=d.execute('SELECT COUNT(*) FROM wallet_profiles').fetchone()[0] if 'wallet_profiles' in tables else 0;w360=d.execute('SELECT COUNT(*) FROM wallet360').fetchone()[0] if 'wallet360' in tables else 0;add('OK' if x=='ok' else 'FAIL','SQLite',f'{x}; pools={pools}; wallets={wallets}; wallet360={w360}');add('OK' if 'wallet360' in tables else 'WARN','Wallet 360 schema','ready' if 'wallet360' in tables else f'start {VERSION_LABEL} once to migrate');d.close()
     except Exception as e:add('WARN','SQLite',e)
     add('OK' if os.getenv('ETHERSCAN_API_KEY','').strip() else 'WARN','Historical pool bootstrap','full history via Etherscan API' if os.getenv('ETHERSCAN_API_KEY','').strip() else 'no ETHERSCAN_API_KEY; recent RPC fallback only')
     try:
         r=requests.get(f"http://127.0.0.1:{os.getenv('DASHBOARD_PORT','8788')}/api/health",timeout=2);data=r.json() if r.ok else {};add('OK' if r.ok else 'WARN','Dashboard',f"HTTP {r.status_code}; core={data.get('hypercore_ws_age_sec')}s; wallet360={data.get('wallet360_age_sec')}s; tracked={data.get('wallet360_watch_count')}")
     except Exception:add('WARN','Dashboard','not running')
-    print('HyperEVM Chain Radar Doctor V0.3.0');print('='*72)
+    print(f'HyperEVM Chain Radar Doctor {VERSION_LABEL}');print('='*72)
     for s,n,d in rows:print(f'[{s}] {n}: {d}')
     print('='*72);fail=any(s=='FAIL' for s,_,_ in rows);print('STATUS:','FAIL' if fail else 'HEALTHY/WARN');raise SystemExit(1 if fail else 0)
 if __name__=='__main__':main()
