@@ -15,6 +15,8 @@ V0.3.0 enriches the highest-scoring wallets with HyperCore account state:
 - `userVaultEquities`: observed vault equity.
 - HyperEVM Read Precompile verification for the same wallet.
 - Dynamic `userFills` and `userNonFundingLedgerUpdates` WebSocket subscriptions for high-score wallets.
+- Live subscribe/unsubscribe watchlist updates without scheduled disconnects.
+- Bounded reconnect snapshot recovery with storage dedupe; HyperCore `tid` is included in fill identity so same-order partial fills do not collide.
 - P1 alert for large changes in observed perp notional exposure.
 - Wallet 360 dashboard and `/api/wallet360` endpoints.
 
@@ -28,6 +30,8 @@ V0.3.0 uses:
 - `0x...0809` HyperCore L1 Block Number
 - `0x...080f` Account Margin Summary
 - `0x...0810` Core User Exists
+
+The current official `hyper-evm-lib` ABI order for Account Margin Summary is `accountValue → marginUsed → ntlPos → rawUsd`.
 
 To avoid competing with the realtime EVM scanner for RPC quota, precompile verification defaults to the top 3 watched wallets every 5 minutes.
 
@@ -44,6 +48,7 @@ SMART_WALLET_STREAM_MIN_SCORE=70
 SMART_WALLET_STREAM_MAX_WALLETS=8
 SMART_WALLET_STREAM_REBUILD_SEC=300
 SMART_WALLET_FILL_ALERT_USD=250000
+SMART_WALLET_SNAPSHOT_RECOVERY_SEC=5
 
 READ_PRECOMPILE_MAX_WALLETS=3
 READ_PRECOMPILE_REFRESH_SEC=300
@@ -67,7 +72,7 @@ Wallet 360 exposes the wallet score, HyperCore account value, perp notional and 
 
 - Wallet Score / P0 / P1 are engineering observation priorities, not trading recommendations.
 - REST snapshots and read-precompile calls may be taken at different moments, so they are stored as dual-source verification rather than forced to match exactly.
-- `isSnapshot=true` user WebSocket messages are ignored after reconnect to prevent historical fill replay.
+- Smart-wallet watchlist updates remain on the live socket. After an unexpected reconnect, only a short recent snapshot overlap is accepted and persisted-event dedupe prevents historical replay.
 - LP drain ratios remain observed priced-flow baselines, not exact TVL.
 - Native HYPE Core→EVM system transaction detection remains best-effort.
 - Read-only: no private keys, seed phrases, signing or transaction submission.
