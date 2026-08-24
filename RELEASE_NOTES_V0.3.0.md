@@ -17,10 +17,14 @@ V0.3.0 turns the V0.2 smart-money flow radar into a persistent high-score wallet
 - Dynamic high-score wallet WebSocket subscriptions:
   - `userFills`
   - `userNonFundingLedgerUpdates`
-- Snapshot replay protection: `isSnapshot=true` messages are ignored after reconnect.
+  - live subscribe/unsubscribe watchlist refresh; no scheduled reconnect gap
+- Bounded reconnect recovery: only a short recent snapshot overlap is accepted, and persisted-event dedupe prevents old events from being re-alerted.
+- HyperCore `tid` is part of fill identity so multiple partial fills from the same order/hash/millisecond are retained separately.
+- Non-funding ledger USD extraction supports the official per-delta fields such as `usdc`, `usdcValue`, `requestedUsd`, `netWithdrawnUsd` and `liquidatedNtlPos` without mispricing generic token `amount` as USD.
 - Material perp-notional change P1 alerts.
 - Wallet 360 persistence and Dashboard APIs.
 - Doctor V0.3 checks HyperCore Info API and Read Precompile availability.
+- Required live CI smoke checks HyperEVM Chain ID, latest block, HyperCore mids, Wallet 360 REST response shapes and the L1 block precompile.
 
 ## Rate-limit design
 
@@ -39,5 +43,6 @@ This keeps the enrichment layer from overwhelming HyperCore Info API limits or t
 - Read-only; no signing or private keys.
 - Wallet Score / P0 / P1 are engineering monitoring priorities, not investment advice.
 - REST and precompile values may represent different moments and are not required to match exactly.
+- Current `AccountMarginSummary` ABI order is `accountValue`, `marginUsed`, `ntlPos`, `rawUsd`, matching the official `hyper-evm-lib` source used for V0.3 verification.
 - LP withdrawal percentages remain observed priced-flow baselines rather than exact pool TVL.
 - Native HYPE Core→EVM system-transaction detection remains best-effort.
