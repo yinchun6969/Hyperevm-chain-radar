@@ -1,18 +1,20 @@
-# HyperEVM Chain Radar V0.3.0
+# HyperEVM Chain Radar V0.3.9
 
 **中文 | English** — HyperEVM + HyperCore capital-flow, smart-money and Wallet 360 monitoring.
 
-[中文说明](README.zh-CN.md) · [English README](README.en-US.md) · [V0.3.0 Release Notes](RELEASE_NOTES_V0.3.0.md)
+[中文说明](README.zh-CN.md) · [English README](README.en-US.md) · [V0.3.9 Release Notes](RELEASE_NOTES_V0.3.9.md)
 
 > Independent community project. Not affiliated with or endorsed by Hyperliquid, HyperSwap, Etherscan, or any wallet/exchange provider.
 
-## V0.3.0 — Wallet 360 Intelligence
+## V0.3.9 — Stable Hardening Release
 
-V0.3.0 adds account-state intelligence on top of V0.2 smart-money flows:
+V0.3.9 freezes and hardens the validated V0.3 Wallet 360 line. It keeps the same monitoring semantics while adding centralized version metadata and release-safety checks.
+
+The core signal path remains:
 
 **HyperCore trade → Core→EVM → HyperSwap BUY → LP → wallet score → HyperCore Spot/Perp/Vault state → Read Precompile verification → ongoing high-score wallet stream.**
 
-### New in V0.3.0
+### Wallet 360 capabilities
 
 - **Wallet 360 snapshots** for high-scoring wallets.
   - HyperCore `clearinghouseState`: account value, perp notional, margin, withdrawable, unrealized PnL and largest open position.
@@ -28,10 +30,10 @@ V0.3.0 adds account-state intelligence on top of V0.2 smart-money flows:
   - reconnect snapshots use a bounded recovery overlap plus storage dedupe; fill identity includes HyperCore `tid`.
 - **Rate-conscious design**: only the highest-scoring wallets are queried; Vault and precompile reads use slower refresh intervals.
 - **Material position-change alert** for large changes in observed perp notional exposure.
-- Dashboard adds Wallet 360 state and `/api/wallet360`.
-- Doctor V0.3 checks HyperCore Info API and the L1 block-number read precompile.
+- Dashboard Wallet 360 state and `/api/wallet360`.
+- Doctor checks HyperCore Info API and the L1 block-number read precompile.
 
-V0.2 capabilities remain: HYPE `@107` public trade stream, wallet score, `Core→EVM→BUY→LP` P0/P1 correlation, HyperSwap V3 historical pool bootstrap, LP withdrawal radar, RPC failover, Telegram, SQLite, Android Termux and Ubuntu systemd.
+Earlier capabilities remain: HYPE `@107` public trade stream, wallet score, `Core→EVM→BUY→LP` P0/P1 correlation, HyperSwap V3 historical pool bootstrap, LP withdrawal radar, RPC failover, Telegram, SQLite, Android Termux and Ubuntu systemd.
 
 ## Quick start
 
@@ -63,7 +65,7 @@ APIs:
 - `/api/wallet360`
 - `/api/wallet360/0x...`
 
-## Recommended V0.3 settings
+## Recommended settings
 
 ```env
 WALLET360_MIN_SCORE=60
@@ -86,11 +88,15 @@ READ_PRECOMPILE_REFRESH_SEC=300
 
 - HyperCore account snapshots are observations, not trading recommendations.
 - Public trade attribution and per-user fill streams are distinct sources; per-user stream events do not double-count the base smart-money score.
-- Read precompiles return HyperCore state corresponding to the HyperEVM block context. REST and precompile reads may be taken at different moments, so V0.3 records them as a verification snapshot rather than requiring exact equality.
+- Read precompiles return HyperCore state corresponding to the HyperEVM block context. REST and precompile reads may be taken at different moments, so they are stored as verification snapshots rather than forced to match exactly.
 - Smart-wallet watchlist changes are synchronized on the live socket. On unexpected reconnects, only a short recent snapshot overlap is accepted and persisted-event dedupe prevents historical replay; `tid` distinguishes same-order partial fills.
 - LP drain percentages remain Radar-observed priced-flow baselines, not exact TVL.
-- Native HYPE Core→EVM system transaction detection remains best-effort.
+- Native HYPE Core→EVM system-transaction detection remains best-effort.
 - Read-only: no private keys, seed phrases, signing or transaction submission.
+
+## Release discipline
+
+Stable releases are developed on a version branch, validated by CI and read-only live smoke tests, then merged into `main` through a pull request. Repository administrators should protect `main` by requiring pull requests and the `validate` CI check, and by blocking direct pushes.
 
 ## Architecture
 

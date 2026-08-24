@@ -2,6 +2,7 @@
 import logging,os,threading,time
 from core.env import load_dotenv
 load_dotenv()
+from core.version import VERSION_LABEL
 from scanner import Scanner
 from services.hypercore_stream import HyperCoreStream
 from services.hypercore_user_stream import HyperCoreUserStream
@@ -24,7 +25,7 @@ def main():
     wallet360=Wallet360Service(store,info,ReadPrecompile(scan.rpc),scan.tg);user_ws=HyperCoreUserStream(store,scan.tg,ws_url)
     tasks={'hyperevm-scanner':lambda:scan.run(stop),'hypercore-ws':lambda:ws.run(stop),'smart-wallet-ws':lambda:user_ws.run(stop),'wallet360':lambda:wallet360.run(stop),'pool-bootstrap':lambda:bootstrap.run(stop),'dashboard':lambda:dashboard.run(store,os.getenv('DASHBOARD_HOST','127.0.0.1'),int(os.getenv('DASHBOARD_PORT','8788')))}
     for n,f in tasks.items():threading.Thread(target=wrap,args=(n,f),name=n,daemon=True).start()
-    log.info('HyperEVM Chain Radar V0.3.0 started')
+    log.info('HyperEVM Chain Radar %s started',VERSION_LABEL)
     try:
         while True:time.sleep(30)
     except KeyboardInterrupt:stop.set()
