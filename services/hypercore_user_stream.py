@@ -71,9 +71,6 @@ class HyperCoreUserStream:
     def _remember_time(self, item):
         self._last_event_ms = max(self._last_event_ms, _event_ms((item or {}).get('time')))
 
-    def _snapshot_recent(self, item):
-        return _event_ms((item or {}).get('time')) >= self._last_event_ms - self.snapshot_recovery_ms
-
     def _save_fill(self, user, fill):
         px = _f(fill.get('px'))
         sz = _f(fill.get('sz'))
@@ -150,15 +147,19 @@ class HyperCoreUserStream:
             if len(user) != 42:
                 return
             is_snapshot = bool(data.get('isSnapshot'))
+            # Freeze one cutoff for the entire snapshot. Updating _last_event_ms while
+            # iterating must not narrow the same message's recovery window if rows
+            # arrive newest-first.
+            snapshot_cutoff_ms = self._last_event_ms - self.snapshot_recovery_ms if is_snapshot else None
             if channel == 'userFills':
                 rows = data.get('fills') or []
                 for fill in rows:
-                    if not is_snapshot or self._snapshot_recent(fill):
+                    if not is_snapshot or _event_ms(fill.get('time')) >= snapshot_cutoff_ms:
                         self._save_fill(user, fill)
             elif channel == 'userNonFundingLedgerUpdates':
                 rows = data.get('nonFundingLedgerUpdates') or []
                 for row in rows:
-                    if not is_snapshot or self._snapshot_recent(row):
+                    if not is_snapshot or _event_ms(row.get('time')) >= snapshot_cutoff_ms:
                         self._save_ledger(user, row)
         except Exception:
             log.exception('smart-wallet WS parse')
