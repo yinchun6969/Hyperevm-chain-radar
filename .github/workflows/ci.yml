@@ -11,6 +11,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
+      - name: Release guard
+        run: python release_guard.py
       - run: python -m py_compile $(find . -name '*.py' -not -path './.venv/*')
       - run: python -m unittest discover -s tests -v
       - name: Live read-only HyperEVM smoke
