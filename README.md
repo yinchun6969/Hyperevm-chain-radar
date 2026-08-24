@@ -1,30 +1,36 @@
-# HyperEVM Chain Radar V0.2.0
+# HyperEVM Chain Radar V0.3.0
 
-**中文 | English** — HyperEVM + HyperCore capital-flow and smart-money monitoring.
+**中文 | English** — HyperEVM + HyperCore capital-flow, smart-money and Wallet 360 monitoring.
 
-[中文说明](README.zh-CN.md) · [English README](README.en-US.md)
+[中文说明](README.zh-CN.md) · [English README](README.en-US.md) · [V0.3.0 Release Notes](RELEASE_NOTES_V0.3.0.md)
 
-> Independent community project. Not affiliated with or endorsed by Hyperliquid, HyperSwap, or Etherscan.
+> Independent community project. Not affiliated with or endorsed by Hyperliquid, HyperSwap, Etherscan, or any wallet/exchange provider.
 
-## V0.2.0 — HYPE Smart-Money Radar
+## V0.3.0 — Wallet 360 Intelligence
 
-V0.2.0 upgrades the V0.1 EVM scanner into a two-layer capital radar:
+V0.3.0 adds account-state intelligence on top of V0.2 smart-money flows:
 
-**HyperCore trade → Core→EVM transfer → HyperSwap BUY → LP deployment → wallet score → P0/P1 sequence alert.**
+**HyperCore trade → Core→EVM → HyperSwap BUY → LP → wallet score → HyperCore Spot/Perp/Vault state → Read Precompile verification → ongoing high-score wallet stream.**
 
-### New in V0.2.0
+### New in V0.3.0
 
-- HyperCore HYPE spot trade stream (`@107`) with buyer/seller wallet attribution.
-- Smart-money wallet profiles: Core buys/sells, Core→EVM flows, EVM buys/sells, LP adds/removes, sequence count and score.
-- `Core → EVM → BUY → LP` correlation with token matching and P0/P1 Telegram alerts.
-- HyperSwap V3 historical pool bootstrap.
-  - Full indexed history when `ETHERSCAN_API_KEY` is configured.
-  - Recent RPC fallback without a key, using <=50-block `eth_getLogs` windows.
-- Swap/LP actor attribution uses transaction sender where available, rather than router-only event sender.
-- Dashboard smart-money table and `/api/wallets`.
-- Doctor V0.2 checks pool bootstrap mode and wallet schema.
+- **Wallet 360 snapshots** for high-scoring wallets.
+  - HyperCore `clearinghouseState`: account value, perp notional, margin, withdrawable, unrealized PnL and largest open position.
+  - HyperCore `spotClearinghouseState`: HYPE / USDC and other spot balances.
+  - `userVaultEquities`: observed vault equity.
+- **Read Precompile verification** through HyperEVM `eth_call` with raw ABI arguments (no selector).
+  - L1 block number `0x...0809`
+  - account margin summary `0x...080f`
+  - Core-user existence `0x...0810`
+  - HYPE / USDC spot balance `0x...0801`
+- **Dynamic smart-wallet WebSocket** subscriptions for `userFills` and `userNonFundingLedgerUpdates`.
+  - snapshot messages are ignored to prevent replay after reconnect/restart.
+- **Rate-conscious design**: only the highest-scoring wallets are queried; Vault and precompile reads use slower refresh intervals.
+- **Material position-change alert** for large changes in observed perp notional exposure.
+- Dashboard adds Wallet 360 state and `/api/wallet360`.
+- Doctor V0.3 checks HyperCore Info API and the L1 block-number read precompile.
 
-V0.1 capabilities remain: Chain ID 999 dual-block scan, HyperCore allMids price feed, CoreWriter monitoring, HyperSwap V3 pool/swap/LP monitoring, LP withdrawal radar, RPC failover, SQLite, Telegram, Android Termux and Ubuntu systemd.
+V0.2 capabilities remain: HYPE `@107` public trade stream, wallet score, `Core→EVM→BUY→LP` P0/P1 correlation, HyperSwap V3 historical pool bootstrap, LP withdrawal radar, RPC failover, Telegram, SQLite, Android Termux and Ubuntu systemd.
 
 ## Quick start
 
@@ -39,45 +45,71 @@ bash scripts/android/install-termux.sh
 
 ```bash
 # Ubuntu
+sudo apt-get update
+sudo apt-get install -y git
+git clone https://github.com/yinchun6969/Hyperevm-chain-radar.git
+cd Hyperevm-chain-radar
 sudo bash scripts/ubuntu/install.sh
 ```
 
-Dashboard: `http://127.0.0.1:8788/zh` · `/en`  
-APIs: `/api/health` · `/api/events` · `/api/wallets`
+Dashboard: `http://127.0.0.1:8788/zh` · `http://127.0.0.1:8788/en`
 
-## Recommended V0.2 config
+APIs:
+
+- `/api/health`
+- `/api/events`
+- `/api/wallets`
+- `/api/wallet360`
+- `/api/wallet360/0x...`
+
+## Recommended V0.3 settings
 
 ```env
-HYPERCORE_TRADE_COINS=@107
-HYPERCORE_SMART_MONEY_MIN_USD=100000
-HYPERCORE_WHALE_TRADE_USD=500000
-ETHERSCAN_API_KEY=
-CAPITAL_SEQUENCE_WINDOW_MIN=180
-CAPITAL_SEQUENCE_P1_USD=100000
-CAPITAL_SEQUENCE_P0_TRANSFER_USD=500000
-CAPITAL_SEQUENCE_P0_BUY_USD=250000
-CAPITAL_SEQUENCE_P0_LP_USD=250000
+WALLET360_MIN_SCORE=60
+WALLET360_MAX_WALLETS=12
+WALLET360_REFRESH_SEC=60
+WALLET360_VAULT_REFRESH_SEC=300
+WALLET360_STATE_ALERT_USD=1000000
+
+SMART_WALLET_STREAM_MIN_SCORE=70
+SMART_WALLET_STREAM_MAX_WALLETS=8
+SMART_WALLET_STREAM_REBUILD_SEC=300
+SMART_WALLET_FILL_ALERT_USD=250000
+
+READ_PRECOMPILE_MAX_WALLETS=3
+READ_PRECOMPILE_REFRESH_SEC=300
 ```
 
-## Important semantics
+## Monitoring semantics
 
-- HyperCore `trades` exposes buyer/seller users; V0.2 uses this for wallet-level Core activity.
-- HYPE spot on HyperCore mainnet is tracked as `@107` by default.
-- Full HyperSwap pool history uses Etherscan API V2 with `chainid=999`; official HyperEVM JSON-RPC remains the realtime source.
-- Without an Etherscan key, bootstrap intentionally scans only a recent configurable RPC window to avoid hundreds of thousands of requests.
-- HyperCore→HyperEVM native HYPE system-transaction detection remains best-effort.
-- LP withdrawal percentages are Radar-observed priced-flow baselines, not exact TVL.
-- Wallet scores are engineering observation scores, not investment recommendations.
+- HyperCore account snapshots are observations, not trading recommendations.
+- Public trade attribution and per-user fill streams are distinct sources; per-user stream events do not double-count the base smart-money score.
+- Read precompiles return HyperCore state corresponding to the HyperEVM block context. REST and precompile reads may be taken at different moments, so V0.3 records them as a verification snapshot rather than requiring exact equality.
+- Smart-wallet WebSocket snapshot messages are intentionally ignored after reconnect to avoid historical replay.
+- LP drain percentages remain Radar-observed priced-flow baselines, not exact TVL.
+- Native HYPE Core→EVM system transaction detection remains best-effort.
+- Read-only: no private keys, seed phrases, signing or transaction submission.
 
-## Verified network constants
+## Architecture
 
-- HyperEVM Chain ID: `999`
-- RPC: `https://rpc.hyperliquid.xyz/evm`
-- HYPE system: `0x2222222222222222222222222222222222222222`
-- CoreWriter: `0x3333333333333333333333333333333333333333`
-- WHYPE: `0x5555555555555555555555555555555555555555`
-- HyperSwap V3 Factory: `0xB1c0fa0B789320044A6F623cFe5eBda9562602E3`
-- HyperSwap V3 Factory deployment block used for indexed bootstrap: `11648`
+```mermaid
+flowchart LR
+  CORE[HyperCore public WS] --> FLOW[Capital Flow]
+  EVM[HyperEVM RPC] --> SCAN[EVM Scanner]
+  FLOW --> SCORE[Wallet Score]
+  SCAN --> SCORE
+  SCORE --> WATCH[High-score Watchlist]
+  WATCH --> INFO[HyperCore Info API]
+  WATCH --> UWS[User Fills / Ledger WS]
+  WATCH --> PRE[Read Precompile Verification]
+  INFO --> W360[Wallet 360]
+  PRE --> W360
+  UWS --> DB[(SQLite)]
+  W360 --> DB
+  DB --> DASH[Dashboard]
+  DB --> TG[Telegram]
+```
 
 ## License
+
 MIT
