@@ -24,7 +24,8 @@ V0.3.0 adds account-state intelligence on top of V0.2 smart-money flows:
   - Core-user existence `0x...0810`
   - HYPE / USDC spot balance `0x...0801`
 - **Dynamic smart-wallet WebSocket** subscriptions for `userFills` and `userNonFundingLedgerUpdates`.
-  - snapshot messages are ignored to prevent replay after reconnect/restart.
+  - watchlist refresh uses live subscribe/unsubscribe instead of scheduled disconnects.
+  - reconnect snapshots use a bounded recovery overlap plus storage dedupe; fill identity includes HyperCore `tid`.
 - **Rate-conscious design**: only the highest-scoring wallets are queried; Vault and precompile reads use slower refresh intervals.
 - **Material position-change alert** for large changes in observed perp notional exposure.
 - Dashboard adds Wallet 360 state and `/api/wallet360`.
@@ -75,6 +76,7 @@ SMART_WALLET_STREAM_MIN_SCORE=70
 SMART_WALLET_STREAM_MAX_WALLETS=8
 SMART_WALLET_STREAM_REBUILD_SEC=300
 SMART_WALLET_FILL_ALERT_USD=250000
+SMART_WALLET_SNAPSHOT_RECOVERY_SEC=5
 
 READ_PRECOMPILE_MAX_WALLETS=3
 READ_PRECOMPILE_REFRESH_SEC=300
@@ -85,7 +87,7 @@ READ_PRECOMPILE_REFRESH_SEC=300
 - HyperCore account snapshots are observations, not trading recommendations.
 - Public trade attribution and per-user fill streams are distinct sources; per-user stream events do not double-count the base smart-money score.
 - Read precompiles return HyperCore state corresponding to the HyperEVM block context. REST and precompile reads may be taken at different moments, so V0.3 records them as a verification snapshot rather than requiring exact equality.
-- Smart-wallet WebSocket snapshot messages are intentionally ignored after reconnect to avoid historical replay.
+- Smart-wallet watchlist changes are synchronized on the live socket. On unexpected reconnects, only a short recent snapshot overlap is accepted and persisted-event dedupe prevents historical replay; `tid` distinguishes same-order partial fills.
 - LP drain percentages remain Radar-observed priced-flow baselines, not exact TVL.
 - Native HYPE Core→EVM system transaction detection remains best-effort.
 - Read-only: no private keys, seed phrases, signing or transaction submission.
