@@ -2,7 +2,7 @@ import json,os,tempfile,unittest
 from core.storage import Store
 from intelligence.wallet360 import summarize_perp,summarize_spot,summarize_vaults,Wallet360Service
 from services.read_precompile import ReadPrecompile,_word_address,_word_uint
-from services.hypercore_user_stream import HyperCoreUserStream
+from services.hypercore_user_stream import HyperCoreUserStream,_ledger_usd
 
 
 def word(v):return hex(int(v)%(1<<256))[2:].rjust(64,'0')
@@ -26,6 +26,11 @@ class FakeInfo:
 
 class FakePC:
     def wallet_check(self,user):return {'ok':True,'user':user,'l1_block_number':999,'core_user_exists':True}
+
+class FakeWS:
+    def __init__(self):self.sent=[]
+    def send(self,x):self.sent.append(json.loads(x))
+    def close(self):pass
 
 class TG:
     def __init__(self):self.messages=[]
@@ -59,5 +64,12 @@ class V030(unittest.TestCase):
         snap={'channel':'userFills','data':{'isSnapshot':True,'user':addr,'fills':[{'coin':'HYPE','px':'50','sz':'10000','side':'B','time':10000000000000,'hash':'0x1','oid':1}]}}
         stream._message(None,json.dumps(snap));self.assertFalse(any(e['kind']=='HYPERCORE_USER_FILL' for e in self.s.recent(10)))
         snap['data']['isSnapshot']=False;stream._message(None,json.dumps(snap));self.assertTrue(any(e['kind']=='HYPERCORE_USER_FILL' for e in self.s.recent(10)))
+    def test_official_ledger_field_and_usd_value(self):
+        addr='0x'+'66'*20;stream=HyperCoreUserStream(self.s,TG());stream.scores={addr:90}
+        msg={'channel':'userNonFundingLedgerUpdates','data':{'user':addr,'isSnapshot':False,'nonFundingLedgerUpdates':[{'time':10000000000000,'hash':'0xabc','delta':{'type':'spotTransfer','token':'HYPE','amount':'100','usdcValue':'12345','user':addr,'destination':'0x'+'77'*20,'fee':'0','nativeTokenFee':'0','nonce':1,'feeToken':'HYPE'}}]}}
+        stream._message(None,json.dumps(msg));rows=[e for e in self.s.recent(10) if e['kind']=='HYPERCORE_LEDGER'];self.assertEqual(len(rows),1);self.assertEqual(rows[0]['usd'],12345);self.assertEqual(_ledger_usd({'type':'vaultWithdraw','netWithdrawnUsd':'9000','requestedUsd':'10000'}),9000)
+    def test_ws_open_sets_heartbeat_and_subscribes(self):
+        addr='0x'+'88'*20;self.s.wallet_flow(addr,core_to_evm_usd=600000,core_buy_usd=600000,evm_buy_usd=600000,lp_add_usd=300000)
+        stream=HyperCoreUserStream(self.s,TG());ws=FakeWS();stream._open(ws);self.assertEqual(self.s.kv_get('smart_wallet_ws_connected'),'1');self.assertGreater(int(self.s.kv_get('smart_wallet_ws_heartbeat','0')),0);types=[x['subscription']['type'] for x in ws.sent];self.assertIn('userFills',types);self.assertIn('userNonFundingLedgerUpdates',types)
 
 if __name__=='__main__':unittest.main()
