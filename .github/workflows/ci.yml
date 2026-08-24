@@ -13,6 +13,8 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m py_compile $(find . -name '*.py' -not -path './.venv/*')
       - run: python -m unittest discover -s tests -v
+      - name: Live read-only HyperEVM smoke
+        run: python live_smoke.py
       - name: Shell syntax
         run: |
           set -e
